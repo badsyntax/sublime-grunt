@@ -21,8 +21,23 @@ class GruntRunner(object):
         package_path = os.path.join(sublime.packages_path(), package_name)
         args = 'grunt --no-color --tasks "' + package_path + '" expose'
 
-        (stdout, stderr) = subprocess.Popen(args, stdout=subprocess.PIPE, env={"PATH": path}, cwd=self.wd, shell=True).communicate()
+        process = subprocess.Popen(
+            args,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env={"PATH": path},
+            cwd=self.wd,
+            shell=True
+        );
+        (stdout, stderr) = process.communicate();
+
         stdout = stdout.decode('utf8')
+        stderr = stderr.decode('utf8')
+
+        if process.returncode != 0:
+            sublime.error_message("Unable to run Grunt\n\n" + stderr)
+            return
+
         json_match = regex_json.search(stdout)
 
         if json_match is not None:
