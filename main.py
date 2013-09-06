@@ -4,6 +4,7 @@ import os
 import re
 import subprocess
 import json
+from copy import deepcopy
 
 package_name = "Grunt"
 package_url = "https://github.com/tvooo/sublime-grunt"
@@ -32,7 +33,7 @@ class GruntRunner(object):
                 self.window.run_command("grunt_error", {"message": "SublimeGrunt: JSON is malformed\n\n" + json_match.groups()[0]})
                 sublime.error_message("Could not read available tasks\n")
             else:
-                tasks = [[name, task['info'], task['meta']['info']] for name, task in json_result.items()]
+                tasks = [[name, task['info'], task['multi'], task['targets']] for name, task in json_result.items()]
                 return sorted(tasks, key=lambda task: task)
         else:
             self.window.run_command("grunt_error", {"message": "SublimeGrunt: Could not expose available tasks\n\n" + stdout})
@@ -59,13 +60,38 @@ class GruntRunner(object):
         self.wd = os.path.dirname(self.grunt_files[file])
         self.tasks = self.list_tasks()
         if self.tasks is not None:
-            self.window.show_quick_panel(self.tasks, self.on_done)
+            self.window.show_quick_panel(self.format_panel_tasks(self.tasks), self.on_task_select)
 
-    def on_done(self, task):
+    def on_task_select(self, task):
         if task > -1:
-            exec_args = settings().get('exec_args')
-            exec_args.update({'cmd': u"grunt --no-color " + self.tasks[task][0], 'shell': True, 'working_dir': self.wd})
-            self.window.run_command("exec", exec_args)
+            self.selected_task = self.tasks[task];
+            targets = self.selected_task[3]
+            if len(targets):
+                targets.append('(Run all targets)');
+                sublime.set_timeout(lambda: self.window.show_quick_panel(
+                    targets,
+                    self.on_task_target_select
+                ), 1)
+            else:
+                self.run_task(self.selected_task[0])
+
+    def on_task_target_select(self, target):
+        if len(self.selected_task[3])-1 == target:
+            self.run_task(self.selected_task[0])
+        else:
+            self.run_task(self.selected_task[0] + ':' + self.selected_task[3][target])
+
+    def run_task(self, task_name):
+        exec_args = settings().get('exec_args')
+        exec_args.update({'cmd': u"grunt --no-color " + task_name, 'shell': True, 'working_dir': self.wd})
+        self.window.run_command("exec", exec_args)
+
+    def format_panel_tasks(self, tasks):
+        formatted_tasks = deepcopy(tasks)
+        for i, task in enumerate(formatted_tasks):
+            formatted_tasks[i][3] = 'Targets: ' + (', '.join(task[3]) if task[2] == True and len(task[3]) else 'None')
+            del formatted_tasks[i][2]
+        return formatted_tasks
 
 
 def settings():
